@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>si-runtime-wasm Demo</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            padding: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 { color: #58a6ff; margin-bottom: 0.5rem; font-size: 1.8rem; }
+        h2 { color: #79c0ff; margin: 1.5rem 0 0.75rem; font-size: 1.3rem; }
+        p { line-height: 1.6; margin-bottom: 0.75rem; }
+        code {
+            background: #161b22;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: #e6edf3;
+        }
+        .section {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+        #budget-output, #spectral-output, #registry-output {
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 0.85rem;
+            white-space: pre-wrap;
+            color: #7ee787;
+            padding: 0.75rem;
+            background: #0d1117;
+            border-radius: 4px;
+            margin-top: 0.5rem;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        #ca-canvas {
+            border: 1px solid #30363d;
+            border-radius: 4px;
+            margin-top: 0.5rem;
+            image-rendering: pixelated;
+        }
+        .controls { margin-top: 0.75rem; }
+        button {
+            background: #238636;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin-right: 8px;
+            margin-bottom: 4px;
+        }
+        button:hover { background: #2ea043; }
+        button.secondary { background: #30363d; }
+        button.secondary:hover { background: #484f58; }
+        select {
+            background: #0d1117;
+            color: #c9d1d9;
+            border: 1px solid #30363d;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+        .badge {
+            display: inline-block;
+            background: #1f6feb;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            margin-left: 8px;
+        }
+        .loading { color: #d29922; }
+    </style>
+</head>
+<body>
+    <h1>⚡ si-runtime-wasm <span class="badge" id="version-badge">loading...</span></h1>
+    <p>WebAssembly runtime for constraint-aware AI — conservation budgets, spectral ranking, and capability discovery running natively in your browser.</p>
+
+    <!-- Conservation Budget -->
+    <div class="section">
+        <h2>💰 Conservation Budget</h2>
+        <p>Demonstrates budget creation, allocation, spending, and audit verification. Open the console for detailed logs.</p>
+        <button onclick="demoBudget()">Run Budget Demo</button>
+        <div id="budget-output">Click "Run Budget Demo" to start...</div>
+    </div>
+
+    <!-- Spectral Ranking -->
+    <div class="section">
+        <h2>📊 Spectral Ranking</h2>
+        <p>Eigenvector centrality computed via power iteration. Node 0 is the hub in a star graph.</p>
+        <button onclick="demoSpectral()">Run Spectral Demo</button>
+        <div id="spectral-output">Click "Run Spectral Demo" to start...</div>
+    </div>
+
+    <!-- Capability Registry -->
+    <div class="section">
+        <h2>🔍 Capability Registry</h2>
+        <p>Register capabilities and resolve dependencies.</p>
+        <button onclick="demoRegistry()">Run Registry Demo</button>
+        <div id="registry-output">Click "Run Registry Demo" to start...</div>
+    </div>
+
+    <!-- Cellular Automaton -->
+    <div class="section">
+        <h2>🧬 Cellular Automaton</h2>
+        <p>Interactive CA grid — choose a rule and step or run the simulation.</p>
+        <div class="controls">
+            <select id="rule-select">
+                <option value="threshold">Threshold</option>
+                <option value="diffusion">Diffusion</option>
+                <option value="smoothlife">SmoothLife</option>
+            </select>
+            <button onclick="caReset()">Reset</button>
+            <button onclick="caStep()">Step</button>
+            <button onclick="caRun()">Run 10</button>
+            <button class="secondary" onclick="caToggleAuto()">Auto</button>
+        </div>
+        <canvas id="ca-canvas" width="400" height="400"></canvas>
+    </div>
+
+    <script type="module">
+        import init, {
+            getVersion, Budget, spectralRank, eigenvectorCentrality,
+            Capability, Registry, Grid, Agent
+        } from './pkg/si_runtime_wasm.js';
+
+        let wasm;
+        let grid;
+        let autoInterval = null;
+        const GRID_SIZE = 50;
+        const CELL_PX = 8;
+
+        async function main() {
+            wasm = await init();
+            document.getElementById('version-badge').textContent = 'v' + getVersion();
+            console.log('[si-runtime-wasm] Initialized, version:', getVersion());
+
+            // Initialize grid
+            grid = Grid.new(GRID_SIZE, "threshold");
+            drawGrid();
+        }
+
+        // ── Budget Demo ──
+        window.demoBudget = function() {
+            const output = document.getElementById('budget-output');
+            const lines = [];
+
+            const b = new Budget(300.0);
+            lines.push(`Created budget: total=${b.total()}`);
+            lines.push(`  gamma=${b.gamma().toFixed(2)}, eta=${b.eta().toFixed(2)}, allocated=${b.allocated().toFixed(2)}`);
+            lines.push(`  remaining=${b.remaining().toFixed(2)}, audit=${b.audit()}`);
+
+            b.allocate(50.0);
+            lines.push(`\nAllocated 50:`);
+            lines.push(`  gamma=${b.gamma().toFixed(2)}, eta=${b.eta().toFixed(2)}, allocated=${b.allocated().toFixed(2)}`);
+            lines.push(`  audit=${b.audit()}`);
+
+            b.spend(20.0);
+            lines.push(`\nSpent 20:`);
+            lines.push(`  gamma=${b.gamma().toFixed(2)}, eta=${b.eta().toFixed(2)}, allocated=${b.allocated().toFixed(2)}`);
+            lines.push(`  audit=${b.audit()}`);
+
+            lines.push(`\nJSON: ${b.toJson()}`);
+            console.log('[Budget]', lines.join('\n'));
+            output.textContent = lines.join('\n');
+        };
+
+        // ── Spectral Demo ──
+        window.demoSpectral = function() {
+            const output = document.getElementById('spectral-output');
+            const n = 6;
+            // Star graph: node 0 is hub
+            const adj = Array.from({length: n}, () => Array(n).fill(0));
+            for (let i = 1; i < n; i++) {
+                adj[0][i] = 1;
+                adj[i][0] = 1;
+            }
+            // Also connect 1-2 for some secondary structure
+            adj[1][2] = 1;
+            adj[2][1] = 1;
+
+            // Flatten adjacency matrix for WASM
+            const flat = adj.flat();
+            const ranking = spectralRank(flat, n);
+            const centrality = eigenvectorCentrality(flat, n);
+
+            const lines = ['Star graph (6 nodes, node 0 is hub):\n'];
+            lines.push('Ranking (highest centrality first):');
+            ranking.forEach((idx, rank) => {
+                lines.push(`  #${rank + 1}: node ${idx} (centrality: ${centrality[idx].toFixed(6)})`);
+            });
+
+            console.log('[Spectral]', lines.join('\n'));
+            output.textContent = lines.join('\n');
+        };
+
+        // ── Registry Demo ──
+        window.demoRegistry = function() {
+            const output = document.getElementById('registry-output');
+            const lines = [];
+
+            const reg = new Registry();
+            const cap1 = new Capability("canvas-renderer", "1.0.0");
+            cap1.provides("ui");
+            cap1.provides("canvas");
+
+            const cap2 = new Capability("audio-engine", "2.0.0");
+            cap2.provides("audio");
+            cap2.requires("ui");
+
+            const cap3 = new Capability("file-store", "1.2.0");
+            cap3.provides("storage");
+            cap3.provides("persistence");
+
+            reg.register(cap1);
+            reg.register(cap2);
+            reg.register(cap3);
+
+            lines.push(`Registry: ${reg.count()} capabilities`);
+
+            const uiCaps = reg.resolve("ui");
+            lines.push(`\nResolving "ui": ${uiCaps.length} result(s)`);
+            uiCaps.forEach(c => lines.push(`  - ${c.getName()} v${c.getVersion()}`));
+
+            const storageCaps = reg.resolve("storage");
+            lines.push(`\nResolving "storage": ${storageCaps.length} result(s)`);
+            storageCaps.forEach(c => lines.push(`  - ${c.getName()} v${c.getVersion()}`));
+
+            lines.push(`\nAudio dependencies:`);
+            const deps = reg.resolveDeps(cap2);
+            deps.forEach(c => lines.push(`  - ${c.getName()} satisfies a requirement`));
+
+            console.log('[Registry]', lines.join('\n'));
+            output.textContent = lines.join('\n');
+        };
+
+        // ── Cellular Automaton ──
+        function drawGrid() {
+            const canvas = document.getElementById('ca-canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = GRID_SIZE * CELL_PX;
+            canvas.height = GRID_SIZE * CELL_PX;
+
+            const state = grid.get_state();
+            const imgData = ctx.createImageData(canvas.width, canvas.height);
+
+            for (let y = 0; y < GRID_SIZE; y++) {
+                for (let x = 0; x < GRID_SIZE; x++) {
+                    const val = state[y * GRID_SIZE + x];
+                    // Color: dark blue to bright cyan
+                    const r = Math.floor(val * 20);
+                    const g = Math.floor(val * 200 + 20);
+                    const b = Math.floor(val * 255);
+
+                    for (let py = 0; py < CELL_PX; py++) {
+                        for (let px = 0; px < CELL_PX; px++) {
+                            const idx = ((y * CELL_PX + py) * canvas.width + (x * CELL_PX + px)) * 4;
+                            imgData.data[idx] = r;
+                            imgData.data[idx + 1] = g;
+                            imgData.data[idx + 2] = b;
+                            imgData.data[idx + 3] = 255;
+                        }
+                    }
+                }
+            }
+            ctx.putImageData(imgData, 0, 0);
+        }
+
+        window.caStep = function() {
+            grid.step();
+            drawGrid();
+        };
+
+        window.caRun = function() {
+            grid.run(10);
+            drawGrid();
+        };
+
+        window.caReset = function() {
+            const rule = document.getElementById('rule-select').value;
+            grid = Grid.new(GRID_SIZE, rule);
+            drawGrid();
+        };
+
+        let autoRunning = false;
+        window.caToggleAuto = function() {
+            autoRunning = !autoRunning;
+            if (autoRunning) {
+                autoInterval = setInterval(() => {
+                    grid.step();
+                    drawGrid();
+                }, 100);
+            } else {
+                clearInterval(autoInterval);
+            }
+        };
+
+        document.getElementById('rule-select').addEventListener('change', function() {
+            if (grid) {
+                grid.setRule(this.value);
+            }
+        });
+
+        main().catch(console.error);
+    </script>
+</body>
+</html>
